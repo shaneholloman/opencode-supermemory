@@ -9,7 +9,7 @@ import type {
 
 const SUPERMEMORY_API_URL = "https://api.supermemory.ai";
 
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 30000;
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
