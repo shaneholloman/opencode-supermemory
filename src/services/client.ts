@@ -29,6 +29,10 @@ export class SupermemoryClient {
         throw new Error("SUPERMEMORY_API_KEY not set");
       }
       this.client = new Supermemory({ apiKey: SUPERMEMORY_API_KEY });
+      this.client.settings.update({
+	     	shouldLLMFilter: true,
+	      filterPrompt: "You are a stateful coding agent. Remember all the information, including but not limited to user's coding preferences, tech stack, behaviours, workflows, and any other relevant details."
+      })
     }
     return this.client;
   }
@@ -42,7 +46,7 @@ export class SupermemoryClient {
           containerTag,
           threshold: CONFIG.similarityThreshold,
           limit: CONFIG.maxMemories,
-          rerank: true,
+          searchMode: "hybrid"
         }),
         TIMEOUT_MS
       );
