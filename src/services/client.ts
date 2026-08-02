@@ -89,6 +89,15 @@ function supportsScopedCanonicalTag(containerTag: string): boolean {
   return /^repo_.+__[0-9a-f]{16}$/i.test(containerTag);
 }
 
+function isNotFoundError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    error.status === 404
+  );
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let id: ReturnType<typeof setTimeout>;
   const timeout = new Promise<T>((_, reject) => {
@@ -378,7 +387,7 @@ export class SupermemoryClient {
     }
   }
 
-  async deleteMemory(memoryId: string) {
+  async deleteMemory(memoryId: string, containerTags: string[] = []) {
     log("deleteMemory: start", { memoryId });
     try {
       await withTimeout(
@@ -388,8 +397,41 @@ export class SupermemoryClient {
       log("deleteMemory: success", { memoryId });
       return { success: true as const };
     } catch (error) {
+      if (!isNotFoundError(error)) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        log("deleteMemory: error", { memoryId, error: errorMessage });
+        return { success: false as const, error: errorMessage };
+      }
+
+      const uniqueTags = [...new Set(containerTags.filter(Boolean))];
+      let lastNotFoundError: unknown = error;
+
+      for (const containerTag of uniqueTags) {
+        try {
+          await withTimeout(
+            this.getClient().memories.forget({ id: memoryId, containerTag }),
+            TIMEOUT_MS,
+          );
+          log("deleteMemory: forgotten", { memoryId });
+          return { success: true as const };
+        } catch (forgetError) {
+          if (!isNotFoundError(forgetError)) {
+            const errorMessage =
+              forgetError instanceof Error
+                ? forgetError.message
+                : String(forgetError);
+            log("deleteMemory: forget error", { memoryId, error: errorMessage });
+            return { success: false as const, error: errorMessage };
+          }
+          lastNotFoundError = forgetError;
+        }
+      }
+
       const errorMessage =
-        error instanceof Error ? error.message : String(error);
+        lastNotFoundError instanceof Error
+          ? lastNotFoundError.message
+          : String(lastNotFoundError);
       log("deleteMemory: error", { memoryId, error: errorMessage });
       return { success: false as const, error: errorMessage };
     }
