@@ -98,6 +98,15 @@ function isNotFoundError(error: unknown): boolean {
   );
 }
 
+function isAuthorizationError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "status" in error &&
+    (error.status === 401 || error.status === 403)
+  );
+}
+
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   let id: ReturnType<typeof setTimeout>;
   const timeout = new Promise<T>((_, reject) => {
@@ -389,49 +398,47 @@ export class SupermemoryClient {
 
   async deleteMemory(memoryId: string, containerTags: string[] = []) {
     log("deleteMemory: start", { memoryId });
+    const uniqueTags = [...new Set(containerTags.filter(Boolean))];
+    let retainedAuthorizationError: unknown;
+
+    for (const [index, containerTag] of uniqueTags.entries()) {
+      try {
+        await withTimeout(
+          this.getClient().memories.forget({ id: memoryId, containerTag }),
+          TIMEOUT_MS,
+        );
+        log("deleteMemory: forgotten", { memoryId });
+        return { success: true as const };
+      } catch (error) {
+        if (isNotFoundError(error)) continue;
+        if (index > 0 && isAuthorizationError(error)) {
+          retainedAuthorizationError ??= error;
+          continue;
+        }
+
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        log("deleteMemory: forget error", { memoryId, error: errorMessage });
+        return { success: false as const, error: errorMessage };
+      }
+    }
+
     try {
       await withTimeout(
         this.getClient().memories.delete(memoryId),
         TIMEOUT_MS,
       );
-      log("deleteMemory: success", { memoryId });
+      log("deleteMemory: deleted document", { memoryId });
       return { success: true as const };
     } catch (error) {
-      if (!isNotFoundError(error)) {
-        const errorMessage =
-          error instanceof Error ? error.message : String(error);
-        log("deleteMemory: error", { memoryId, error: errorMessage });
-        return { success: false as const, error: errorMessage };
-      }
-
-      const uniqueTags = [...new Set(containerTags.filter(Boolean))];
-      let lastNotFoundError: unknown = error;
-
-      for (const containerTag of uniqueTags) {
-        try {
-          await withTimeout(
-            this.getClient().memories.forget({ id: memoryId, containerTag }),
-            TIMEOUT_MS,
-          );
-          log("deleteMemory: forgotten", { memoryId });
-          return { success: true as const };
-        } catch (forgetError) {
-          if (!isNotFoundError(forgetError)) {
-            const errorMessage =
-              forgetError instanceof Error
-                ? forgetError.message
-                : String(forgetError);
-            log("deleteMemory: forget error", { memoryId, error: errorMessage });
-            return { success: false as const, error: errorMessage };
-          }
-          lastNotFoundError = forgetError;
-        }
-      }
-
+      const errorToReturn =
+        isNotFoundError(error) && retainedAuthorizationError !== undefined
+          ? retainedAuthorizationError
+          : error;
       const errorMessage =
-        lastNotFoundError instanceof Error
-          ? lastNotFoundError.message
-          : String(lastNotFoundError);
+        errorToReturn instanceof Error
+          ? errorToReturn.message
+          : String(errorToReturn);
       log("deleteMemory: error", { memoryId, error: errorMessage });
       return { success: false as const, error: errorMessage };
     }

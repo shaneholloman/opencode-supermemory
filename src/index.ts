@@ -525,9 +525,9 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
 
                 const scope = args.scope || "project";
                 const readTags =
-                  args.scope === "user"
+                  scope === "user"
                     ? tags.personalReads
-                    : args.scope === "project"
+                    : scope === "project"
                       ? tags.projectReads
                       : tags.allReads;
 
