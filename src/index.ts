@@ -524,9 +524,16 @@ export const SupermemoryPlugin: Plugin = async (ctx: PluginInput) => {
                 }
 
                 const scope = args.scope || "project";
+                const readTags =
+                  scope === "user"
+                    ? tags.personalReads
+                    : scope === "project"
+                      ? tags.projectReads
+                      : tags.allReads;
 
                 const result = await supermemoryClient.deleteMemory(
-                  args.memoryId
+                  args.memoryId,
+                  [tags.canonical, ...readTags],
                 );
 
                 if (!result.success) {
@@ -593,10 +600,15 @@ function formatSearchResults(
     query,
     scope,
     count: memoryResults.length,
-    results: memoryResults.slice(0, limit || 10).map((r) => ({
-      id: r.id,
-      content: r.memory || r.chunk,
-      similarity: Math.round((r.similarity ?? 0) * 100),
-    })),
+    results: memoryResults.slice(0, limit || 10).map((r) => {
+      const result = {
+        content: r.memory ?? r.chunk,
+        similarity: Math.round((r.similarity ?? 0) * 100),
+      };
+
+      return r.memory === undefined
+        ? { ...result, forgettable: false }
+        : { id: r.id, ...result, forgettable: true };
+    }),
   });
 }
