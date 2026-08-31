@@ -8,7 +8,7 @@ import { openUrl } from "./openUrl.js";
 
 const CREDENTIALS_DIR = join(homedir(), ".supermemory-opencode");
 export const CREDENTIALS_FILE = join(CREDENTIALS_DIR, "credentials.json");
-const AUTH_BASE_URL = process.env.SUPERMEMORY_AUTH_URL || "https://app.supermemory.ai/auth/agent-connect";
+const AUTH_BASE_URL = process.env.SUPERMEMORY_AUTH_URL || "https://console.supermemory.ai/auth/connect";
 const AUTH_TIMEOUT = Number(process.env.SUPERMEMORY_AUTH_TIMEOUT) || 5 * 60_000;
 const CLIENT_NAME = "opencode";
 
